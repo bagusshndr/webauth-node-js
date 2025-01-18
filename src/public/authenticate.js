@@ -3,7 +3,7 @@ document.getElementById('authenticate').addEventListener('click', async () => {
     if (!username) return;
   
     // Fetch authentication options from the backend
-    const response = await fetch(`/webauthn/generate-authentication-options?username=${username}`);
+    const response = await fetch(`https://5674-2001-448a-2020-a9ef-6914-d2b5-ad4b-b0b5.ngrok-free.app/webauthn/generate-authentication-options?username=${username}`);
     const options = await response.json();
   
     // Start WebAuthn authentication
@@ -19,7 +19,7 @@ document.getElementById('authenticate').addEventListener('click', async () => {
     const credential = await navigator.credentials.get({ publicKey });
   
     // Send the response to the backend for verification
-    const result = await fetch('/webauthn/verify-authentication', {
+    const result = await fetch('https://5674-2001-448a-2020-a9ef-6914-d2b5-ad4b-b0b5.ngrok-free.app/webauthn/verify-authentication', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

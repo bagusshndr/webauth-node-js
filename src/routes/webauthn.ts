@@ -14,8 +14,8 @@ const users: Record<string, User> = {};
 
 // Relying Party configuration
 const rpName = 'Simple WebAuthn Example';
-const rpID = 'localhost';
-const origin = `http://${rpID}:3000`;
+const rpID = '5674-2001-448a-2020-a9ef-6914-d2b5-ad4b-b0b5.ngrok-free.app';
+const origin = `https://${rpID}`;
 
 // 1. Generate Registration Options
 router.get('/generate-registration-options', async (req: any, res: any) => {
@@ -59,7 +59,7 @@ router.post('/verify-registration', async (req: any, res: any) => {
     const verification = await verifyRegistrationResponse({
       response,
       expectedChallenge: user.currentChallenge!,
-      expectedOrigin: ['http://localhost:3000', 'http://localhost:5000'],
+      expectedOrigin:origin,
       expectedRPID: rpID,
     });
 
@@ -73,7 +73,6 @@ router.post('/verify-registration', async (req: any, res: any) => {
         publicKey: Buffer.from(credentialPublicKey).toString('base64url'),
         counter,
       });
-
       return res.json({ verified: true });
     } else {
       return res.status(400).json({ error: 'Verification failed' });
