@@ -73,6 +73,8 @@ router.post('/verify-registration', async (req: any, res: any) => {
         publicKey: Buffer.from(credentialPublicKey).toString('base64url'),
         counter,
       });
+
+      users[username] = user;
       return res.json({ verified: true });
     } else {
       return res.status(400).json({ error: 'Verification failed' });
@@ -91,11 +93,10 @@ router.get('/generate-authentication-options', async (req: any, res: any) => {
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
   }
-
   const options = await generateAuthenticationOptions({
     rpID,
     allowCredentials: user.credentials.map((cred) => ({
-      id: Buffer.from(cred.credentialID, 'base64url').toString(),
+      id: cred.credentialID,
       type: 'public-key',
     })),
     userVerification: 'preferred',
@@ -115,6 +116,8 @@ router.post('/verify-authentication', async (req: any, res: any) => {
   }
 
   try {
+    console.log(user.credentials);
+    console.log(response);
     const authenticator = user.credentials.find((cred) => cred.credentialID === response.rawId);
     if (!authenticator) {
       return res.status(400).json({ error: 'Authenticator not found' });

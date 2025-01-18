@@ -9,10 +9,16 @@ document.getElementById('authenticate').addEventListener('click', async () => {
     // Start WebAuthn authentication
     const publicKey = {
       ...options,
-      challenge: Uint8Array.from(atob(options.challenge), c => c.charCodeAt(0)),
-      allowCredentials: options.allowCredentials.map(cred => ({
+      challenge: Uint8Array.from(
+        atob(base64urlToBase64(options.challenge)),
+        (c) => c.charCodeAt(0)
+      ),
+      allowCredentials: options.allowCredentials.map((cred) => ({
         ...cred,
-        id: Uint8Array.from(atob(cred.id), c => c.charCodeAt(0)),
+        id: Uint8Array.from(
+          atob(base64urlToBase64(cred.id)),
+          (c) => c.charCodeAt(0)
+        ),
       })),
     };
   
@@ -43,4 +49,10 @@ document.getElementById('authenticate').addEventListener('click', async () => {
     const verification = await result.json();
     alert(verification.verified ? 'Authentication successful!' : 'Authentication failed.');
   });
+
+
+  function base64urlToBase64(base64url) {
+    return base64url.replace(/-/g, '+').replace(/_/g, '/');
+  }
+  
   
