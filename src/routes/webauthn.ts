@@ -14,11 +14,12 @@ const users: Record<string, User> = {};
 
 // Relying Party configuration
 const rpName = 'Simple WebAuthn Example';
-const rpID = '5674-2001-448a-2020-a9ef-6914-d2b5-ad4b-b0b5.ngrok-free.app';
+const rpID = 'feda-2001-448a-2020-2c65-79-6b39-fae3-f7d0.ngrok-free.app';
 const origin = `https://${rpID}`;
 
 // 1. Generate Registration Options
 router.get('/generate-registration-options', async (req: any, res: any) => {
+  // const fullUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
   const username = req.query.username as string;
   if (!username) {
     return res.status(400).json({ error: 'Username is required' });
@@ -46,7 +47,6 @@ router.get('/generate-registration-options', async (req: any, res: any) => {
   res.json(options);
 });
 
-
 // 2. Verify Registration Response
 router.post('/verify-registration', async (req: any, res: any) => {
   const { username, response } = req.body;
@@ -56,13 +56,14 @@ router.post('/verify-registration', async (req: any, res: any) => {
   }
 
   try {
+    console.log('mantulttt');
     const verification = await verifyRegistrationResponse({
       response,
       expectedChallenge: user.currentChallenge!,
       expectedOrigin:origin,
       expectedRPID: rpID,
     });
-
+    console.log('mantul',verification);
     if (verification.verified && verification.registrationInfo) {
       const { credential } = verification.registrationInfo;
       const { id: credentialID, publicKey: credentialPublicKey, counter } = credential;
@@ -80,11 +81,10 @@ router.post('/verify-registration', async (req: any, res: any) => {
       return res.status(400).json({ error: 'Verification failed' });
     }
   } catch (err) {
+    console.log('err', err);
     return res.status(400).json({ error: (err as Error).message });
   }
 });
-
-
 
 // 3. Generate Authentication Options
 router.get('/generate-authentication-options', async (req: any, res: any) => {
@@ -105,7 +105,6 @@ router.get('/generate-authentication-options', async (req: any, res: any) => {
   user.currentChallenge = options.challenge;
   res.json(options);
 });
-
 
 // 4. Verify Authentication Response
 router.post('/verify-authentication', async (req: any, res: any) => {

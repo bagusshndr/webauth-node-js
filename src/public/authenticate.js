@@ -1,58 +1,45 @@
-document.getElementById('authenticate').addEventListener('click', async () => {
-    const username = prompt('Enter username for authentication:');
-    if (!username) return;
-  
-    // Fetch authentication options from the backend
-    const response = await fetch(`https://5674-2001-448a-2020-a9ef-6914-d2b5-ad4b-b0b5.ngrok-free.app/webauthn/generate-authentication-options?username=${username}`);
-    const options = await response.json();
-  
-    // Start WebAuthn authentication
-    const publicKey = {
-      ...options,
-      challenge: Uint8Array.from(
-        atob(base64urlToBase64(options.challenge)),
-        (c) => c.charCodeAt(0)
-      ),
-      allowCredentials: options.allowCredentials.map((cred) => ({
-        ...cred,
-        id: Uint8Array.from(
-          atob(base64urlToBase64(cred.id)),
-          (c) => c.charCodeAt(0)
-        ),
-      })),
-    };
-  
-    const credential = await navigator.credentials.get({ publicKey });
-  
-    // Send the response to the backend for verification
-    const result = await fetch('https://5674-2001-448a-2020-a9ef-6914-d2b5-ad4b-b0b5.ngrok-free.app/webauthn/verify-authentication', {
+const { startAuthentication } = SimpleWebAuthnBrowser;
+
+const elemAuthenticate = document.getElementById('authenticate');
+elemAuthenticate.addEventListener('click', async () => {
+  elemSuccess.innerHTML = '';
+  elemError.innerHTML = '';
+
+  // Minta username dari pengguna
+  const username = prompt('Enter username for authentication:');
+  if (!username) {
+    elemError.innerText = 'Authentication cancelled. Username is required.';
+    return;
+  }
+
+  try {
+    // GET opsi autentikasi dari backend
+    const resp = await fetch(`https://feda-2001-448a-2020-2c65-79-6b39-fae3-f7d0.ngrok-free.app/webauthn/generate-authentication-options?username=${username}`);
+    const optionsJSON = await resp.json();
+
+    // Mulai proses autentikasi menggunakan SimpleWebAuthnBrowser
+    const asseResp = await startAuthentication({ optionsJSON });
+
+    // Kirim respons ke backend untuk verifikasi
+    const verificationResp = await fetch('https://feda-2001-448a-2020-2c65-79-6b39-fae3-f7d0.ngrok-free.app/webauthn/verify-authentication', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         username,
-        response: {
-          id: credential.id,
-          rawId: btoa(String.fromCharCode(...new Uint8Array(credential.rawId))),
-          type: credential.type,
-          response: {
-            authenticatorData: btoa(String.fromCharCode(...new Uint8Array(credential.response.authenticatorData))),
-            clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(credential.response.clientDataJSON))),
-            signature: btoa(String.fromCharCode(...new Uint8Array(credential.response.signature))),
-            userHandle: credential.response.userHandle
-              ? btoa(String.fromCharCode(...new Uint8Array(credential.response.userHandle)))
-              : null,
-          },
-        },
+        response: asseResp,
       }),
     });
-  
-    const verification = await result.json();
-    alert(verification.verified ? 'Authentication successful!' : 'Authentication failed.');
-  });
 
+    const verificationJSON = await verificationResp.json();
 
-  function base64urlToBase64(base64url) {
-    return base64url.replace(/-/g, '+').replace(/_/g, '/');
+    // Tampilkan hasil verifikasi
+    if (verificationJSON && verificationJSON.verified) {
+      elemSuccess.innerText = 'Authentication successful!';
+    } else {
+      elemError.innerHTML = `Authentication failed: <pre>${JSON.stringify(verificationJSON)}</pre>`;
+    }
+  } catch (error) {
+    // Tangani error dari proses autentikasi
+    elemError.innerText = `Unexpected error: ${error.message}`;
   }
-  
-  
+});
