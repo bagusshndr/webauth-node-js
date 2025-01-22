@@ -1,36 +1,39 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
   generateAuthenticationOptions,
   verifyAuthenticationResponse,
 } from '@simplewebauthn/server';
-import { User } from '../types/user';
+import prisma from '../prisma';
+import { Credential } from '@prisma/client';
+
 
 const router = express.Router();
-
-// Simulated in-memory user storage
-const users: Record<string, User> = {};
-
-// Relying Party configuration
 const rpName = 'Simple WebAuthn Example';
-const rpID = 'feda-2001-448a-2020-2c65-79-6b39-fae3-f7d0.ngrok-free.app';
-const origin = `https://${rpID}`;
+let rpID = '';
+let origin = ``;
+
+router.use((req: Request, res: Response, next: NextFunction) => {
+  rpID = `${req.get('host')}`;
+  origin = `https://${rpID}`;
+  next();
+});
 
 // 1. Generate Registration Options
 router.get('/generate-registration-options', async (req: any, res: any) => {
-  // const fullUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
   const username = req.query.username as string;
+
   if (!username) {
     return res.status(400).json({ error: 'Username is required' });
   }
 
-  const user = users[username] || { id: username, username, credentials: [] };
-  users[username] = user;
+  let user = await prisma.user.findUnique({ where: { username } });
+  if (!user) {
+    user = await prisma.user.create({ data: { username } });
+  }
 
-  // Konversi userID menjadi Uint8Array
   const userID = Buffer.from(user.id, 'utf-8');
-
   const options = await generateRegistrationOptions({
     rpName,
     rpID,
@@ -43,45 +46,53 @@ router.get('/generate-registration-options', async (req: any, res: any) => {
     },
   });
 
-  user.currentChallenge = options.challenge;
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { currentChallenge: options.challenge },
+  });
+
   res.json(options);
 });
 
 // 2. Verify Registration Response
 router.post('/verify-registration', async (req: any, res: any) => {
   const { username, response } = req.body;
-  const user = users[username];
+
+  const user = await prisma.user.findUnique({
+    where: { username },
+    include: { credentials: true },
+  });
+
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
   }
 
   try {
-    console.log('mantulttt');
     const verification = await verifyRegistrationResponse({
       response,
       expectedChallenge: user.currentChallenge!,
-      expectedOrigin:origin,
+      expectedOrigin: origin,
       expectedRPID: rpID,
     });
-    console.log('mantul',verification);
+
     if (verification.verified && verification.registrationInfo) {
       const { credential } = verification.registrationInfo;
       const { id: credentialID, publicKey: credentialPublicKey, counter } = credential;
 
-      // Simpan data yang sudah dalam format Base64URL
-      user.credentials.push({
-        credentialID, // Sudah Base64URL
-        publicKey: Buffer.from(credentialPublicKey).toString('base64url'),
-        counter,
+      await prisma.credential.create({
+        data: {
+          userId: user.id,
+          credentialId: credentialID,
+          publicKey: Buffer.from(credentialPublicKey).toString('base64url'),
+          counter,
+        },
       });
 
-      users[username] = user;
       return res.json({ verified: true });
     } else {
       return res.status(400).json({ error: 'Verification failed' });
     }
   } catch (err) {
-    console.log('err', err);
     return res.status(400).json({ error: (err as Error).message });
   }
 });
@@ -89,59 +100,77 @@ router.post('/verify-registration', async (req: any, res: any) => {
 // 3. Generate Authentication Options
 router.get('/generate-authentication-options', async (req: any, res: any) => {
   const username = req.query.username as string;
-  const user = users[username];
+
+  const user = await prisma.user.findUnique({
+    where: { username },
+    include: { credentials: true },
+  });
+
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
   }
+
   const options = await generateAuthenticationOptions({
     rpID,
-    allowCredentials: user.credentials.map((cred) => ({
-      id: cred.credentialID,
+    allowCredentials: user.credentials.map((cred: Credential) => ({
+      id: cred.credentialId,
       type: 'public-key',
     })),
     userVerification: 'preferred',
   });
 
-  user.currentChallenge = options.challenge;
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { currentChallenge: options.challenge },
+  });
+
   res.json(options);
 });
 
 // 4. Verify Authentication Response
 router.post('/verify-authentication', async (req: any, res: any) => {
   const { username, response } = req.body;
-  const user = users[username];
+
+  const user = await prisma.user.findUnique({
+    where: { username },
+    include: { credentials: true },
+  });
+
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
   }
 
-  try {
-    console.log(user.credentials);
-    console.log(response);
-    const authenticator = user.credentials.find((cred) => cred.credentialID === response.rawId);
-    if (!authenticator) {
-      return res.status(400).json({ error: 'Authenticator not found' });
-    }
+  const authenticator = user.credentials.find((cred: Credential) => cred.credentialId === response.rawId);
+  if (!authenticator) {
+    return res.status(400).json({ error: 'Authenticator not found' });
+  }
 
+  try {
     const verification = await verifyAuthenticationResponse({
       response,
       expectedChallenge: user.currentChallenge!,
       expectedOrigin: origin,
       expectedRPID: rpID,
       credential: {
-        id: Buffer.from(authenticator.credentialID, 'base64url').toString(),
+        id: authenticator.credentialId,
         publicKey: Buffer.from(authenticator.publicKey, 'base64url'),
         counter: authenticator.counter,
       },
     });
 
     if (verification.verified) {
-      authenticator.counter = verification.authenticationInfo.newCounter;
+      await prisma.credential.update({
+        where: { credentialId: authenticator.credentialId },
+        data: { counter: verification.authenticationInfo.newCounter },
+      });
+
       return res.json({ verified: true });
+    } else {
+      return res.status(400).json({ error: 'Verification failed' });
     }
   } catch (err) {
     return res.status(400).json({ error: (err as Error).message });
   }
 });
-
 
 export default router;
